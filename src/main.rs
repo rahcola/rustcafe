@@ -1,3 +1,4 @@
+#![feature(slicing_syntax)]
 extern crate serialize;
 extern crate hyper;
 
@@ -21,9 +22,23 @@ fn restaurants() -> Vec<(u64, String)> {
     v
 }
 
+fn menus(id: u64) -> Vec<(String, Vec<String>)> {
+    let url = Url::parse(format!("http://messi.hyyravintolat.fi/publicapi/restaurant/{}", id)[]);
+    let req = Request::get(url.unwrap()).unwrap();
+    let response = req.start().unwrap().send().unwrap().read_to_string().unwrap();
+    let o = json::from_str(response.as_slice()).unwrap();
+    let menus = o.as_object().unwrap().get("data").unwrap().as_array().unwrap();
+    menus.iter().map(|menu| {
+        let date = menu.as_object().unwrap().get("date_en").unwrap().as_string().unwrap().to_string();
+        let foods = menu.as_object().unwrap().get("data")
+            .unwrap().as_array().unwrap().iter().map(|o| {
+                o.as_object().unwrap().get("name").unwrap().as_string().unwrap().to_string()
+            }).collect::<Vec<String>>();
+        (date, foods)
+    }).collect::<Vec<(String, Vec<String>)>>()
+}
+
 fn main() {
-    for x in restaurants().iter() {
-        println!("{}", x);
-    }
+    println!("{}", menus(1));
 }
 
