@@ -29,6 +29,7 @@ struct Restaurant {
     name: String,
 }
 
+#[deriving(PartialEq, Eq)]
 struct UnicafeDate(Date<FixedOffset>);
 
 #[deriving(Decodable, Show)]
@@ -46,18 +47,6 @@ struct Food {
 struct Menu {
     date: UnicafeDate,
     data: Vec<Food>,
-}
-
-fn finnish_weekday(w: Weekday) -> &'static str {
-    match w {
-        Weekday::Mon => "Ma",
-        Weekday::Tue => "Ti",
-        Weekday::Wed => "Ke",
-        Weekday::Thu => "To",
-        Weekday::Fri => "Pe",
-        Weekday::Sat => "La",
-        Weekday::Sun => "Su",
-    }
 }
 
 impl Show for UnicafeDate {
@@ -83,6 +72,18 @@ fn unicafe_today() -> Date<FixedOffset> {
     UTC::today().with_offset(FixedOffset::east(60*60*2))
 }
 
+fn finnish_weekday(w: Weekday) -> &'static str {
+    match w {
+        Weekday::Mon => "Ma",
+        Weekday::Tue => "Ti",
+        Weekday::Wed => "Ke",
+        Weekday::Thu => "To",
+        Weekday::Fri => "Pe",
+        Weekday::Sat => "La",
+        Weekday::Sun => "Su",
+    }
+}
+
 fn api<T: serialize::Decodable<json::Decoder, json::DecoderError>>
     (url_str: &str) -> T {
     let url = Url::parse(url_str).unwrap();
@@ -96,8 +97,7 @@ fn api<T: serialize::Decodable<json::Decoder, json::DecoderError>>
             Err(e)
                 => panic!("GET {} failed: {}", url_str, e),
         };
-    let r: ApiResponse<T> = json::decode(res[]).unwrap();
-    r.data
+    json::decode::<ApiResponse<T>>(res[]).unwrap().data
 }
 
 fn restaurants() -> Vec<Restaurant> {
@@ -133,16 +133,15 @@ fn main() {
     let rs = restaurants();
     let r = args.arg_restaurant[];
     match restaurant_id(&rs, r) {
-        Some(id) => for m in menus(id).iter() {
-            if args.flag_today {
-                let UnicafeDate(date) = m.date;
-                if date == unicafe_today() {
-                    for f in m.data.iter() {
-                        println!("{}\t{}", price_symbol(f), f.name);
-                    }
-                    return;
+        Some(id) => if args.flag_today {
+            let today = UnicafeDate(unicafe_today());
+            menus(id).iter().find(|m| m.date == today).map(|m| {
+                for f in m.data.iter() {
+                    println!("{}\t{}", price_symbol(f), f.name);
                 }
-            } else {
+            });
+        } else {
+            for m in menus(id).iter() {
                 println!("{}", m.date);
                 for f in m.data.iter() {
                     println!("\t{}\t{}", price_symbol(f), f.name);
