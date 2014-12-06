@@ -6,20 +6,28 @@ use serialize::json;
 use hyper::Url;
 use hyper::client::Request;
 
-fn restaurants() -> Vec<(u64, String)> {
-    let url = Url::parse("http://messi.hyyravintolat.fi/publicapi/restaurants/");
-    let req = Request::get(url.unwrap()).unwrap();
-    let response = req.start().unwrap().send().unwrap().read_to_string().unwrap();
-    let o = json::from_str(response.as_slice()).unwrap();
-    let restaurants = o.as_object().unwrap().get("data").unwrap().as_array().unwrap();
-    let mut v = Vec::new();
-    for o in restaurants.iter() {
-        let r = o.as_object().unwrap();
-        let id = r.get("id").unwrap().as_u64().unwrap();
-        let name = r.get("name").unwrap().as_string().unwrap();
-        v.push((id, name.to_string()));
-    };
-    v
+#[deriving(Decodable, Show)]
+struct Response<T> {
+    status: String,
+    data: T,
+}
+
+#[deriving(Decodable, Show)]
+struct Restaurant {
+    id: u64,
+    name: String,
+}
+
+fn restaurants() -> Vec<Restaurant> {
+    let url = Url::parse("http://messi.hyyravintolat.fi/publicapi/restaurants").unwrap();
+    let res = Request::get(url)
+        .and_then(|r| { r.start() })
+        .and_then(|r| { r.send() })
+        .unwrap()
+        .read_to_string()
+        .unwrap();
+    let response: Response<Vec<Restaurant>> = json::decode(res.as_slice()).unwrap();
+    response.data
 }
 
 fn menus(id: u64) -> Vec<(String, Vec<String>)> {
@@ -39,6 +47,5 @@ fn menus(id: u64) -> Vec<(String, Vec<String>)> {
 }
 
 fn main() {
-    println!("{}", menus(1));
+    println!("{}", restaurants());
 }
-
