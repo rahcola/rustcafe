@@ -109,12 +109,7 @@ fn menus(id: u64) -> Vec<Menu> {
 }
 
 fn restaurant_id(rs: &Vec<Restaurant>, name: &str) -> Option<u64> {
-    for x in rs.iter() {
-        if x.name[] == name {
-            return Some(x.id)
-        }
-    }
-    None
+    rs.iter().find(|r| r.name[] == name).map(|r| r.id)
 }
 
 fn price_symbol(food: &Food) -> &'static str {
