@@ -1,6 +1,6 @@
 [root]
 name = "rustcafe"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "docopt_macros 0.6.12 (git+git://github.com/docopt/docopt.rs)",
  "hyper 0.0.1 (git+https://github.com/hyperium/hyper)",
