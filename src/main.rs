@@ -24,8 +24,14 @@ struct Restaurant {
 }
 
 #[deriving(Decodable, Show)]
+struct Price {
+    name: String,
+}
+
+#[deriving(Decodable, Show)]
 struct Food {
     name: String,
+    price: Price,
 }
 
 #[deriving(Decodable, Show)]
@@ -69,6 +75,18 @@ fn restaurant_id(rs: &Vec<Restaurant>, name: &str) -> Option<u64> {
     None
 }
 
+fn price_symbol(food: &Food) -> &'static str {
+    if food.price.name[] == "Bistro" {
+        "€€€€"
+    } else if food.price.name[] == "Maukkaasti" {
+        "€€€"
+    } else if food.price.name[] == "Edullisesti" {
+        "€€"
+    } else {
+        "€"
+    }
+}
+
 docopt!(Args deriving Show, "
 Usage: rustcafe <restaurant>
 ")
@@ -81,7 +99,7 @@ fn main() {
         Some(id) => for m in menus(id).iter() {
             println!("{}", m.date);
             for f in m.data.iter() {
-                println!("\t{}", f.name);
+                println!("\t{}\t{}", price_symbol(f), f.name);
             }
         },
         None => {
