@@ -2,6 +2,7 @@
 name = "rustcafe"
 version = "0.0.1"
 dependencies = [
+ "docopt_macros 0.6.12 (git+git://github.com/docopt/docopt.rs)",
  "hyper 0.0.1 (git+https://github.com/hyperium/hyper)",
 ]
 
@@ -13,6 +14,19 @@ dependencies = [
  "openssl 0.2.2 (git+https://github.com/sfackler/rust-openssl)",
  "time 0.1.0 (git+https://github.com/rust-lang/time)",
  "url 0.2.2 (git+https://github.com/servo/rust-url)",
+]
+
+[[package]]
+name = "docopt"
+version = "0.6.12"
+source = "git+git://github.com/docopt/docopt.rs#938d640720d91529252adddc79d020714cba7346"
+
+[[package]]
+name = "docopt_macros"
+version = "0.6.12"
+source = "git+git://github.com/docopt/docopt.rs#938d640720d91529252adddc79d020714cba7346"
+dependencies = [
+ "docopt 0.6.12 (git+git://github.com/docopt/docopt.rs)",
 ]
 
 [[package]]

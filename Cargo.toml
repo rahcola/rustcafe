@@ -1,13 +1,13 @@
 [package]
-
 name = "rustcafe"
 version = "0.0.1"
 authors = ["Jani Rahkola <jani.rahkola@iki.fi>"]
 
 [[bin]]
-
 name = "rustcafe"
 
 [dependencies.hyper]
-
 git = "https://github.com/hyperium/hyper"
+
+[dependencies.docopt_macros]
+git = "git://github.com/docopt/docopt.rs"
