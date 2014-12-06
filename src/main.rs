@@ -4,10 +4,12 @@ extern crate hyper;
 
 use serialize::json;
 use hyper::Url;
+use hyper::status::StatusCode;
 use hyper::client::Request;
+use hyper::client::Response;
 
 #[deriving(Decodable, Show)]
-struct Response<T> {
+struct ApiResponse<T> {
     status: String,
     data: T,
 }
@@ -29,30 +31,36 @@ struct Menu {
     data: Vec<Food>,
 }
 
-fn restaurants() -> Vec<Restaurant> {
-    let url = Url::parse("http://messi.hyyravintolat.fi/publicapi/restaurants").unwrap();
-    let res = Request::get(url)
+fn api(url_str: &str) -> Response {
+    let url = match Url::parse(url_str) {
+        Ok(u) => u,
+        Err(e) => panic!("bad url {}: {}", url_str, e),
+    };
+    let res = match Request::get(url)
         .and_then(|r| { r.start() })
-        .and_then(|r| { r.send() })
-        .unwrap()
-        .read_to_string()
-        .unwrap();
-    let response: Response<Vec<Restaurant>> = json::decode(res[]).unwrap();
+        .and_then(|r| { r.send() }) {
+            Ok(r @ Response {status: StatusCode::Ok, ..})
+                => r,
+            Ok(Response {status: x, ..})
+                => panic!("GET {} failed: {}", url_str, x),
+            Err(e)
+                => panic!("GET {} failed: {}", url_str, e),
+        };
+    res
+}
+
+fn restaurants() -> Vec<Restaurant> {
+    let url = "http://messi.hyyravintolat.fi/publicapi/restaurants";
+    let res = api(url[]).read_to_string().unwrap();
+    let response: ApiResponse<Vec<Restaurant>> = json::decode(res[]).unwrap();
     response.data
 }
 
 fn menus(id: u64) -> Vec<Menu> {
-    let url = Url::parse(format!("http://messi.hyyravintolat.fi/publicapi/restaurant/{}", id)[]).unwrap();
-    let res = Request::get(url)
-        .and_then(|r| { r.start() })
-        .and_then(|r| { r.send() })
-        .unwrap()
-        .read_to_string()
-        .unwrap();
-    match json::decode(res[]) {
-        Ok(Response { data: d, .. }) => d,
-        Err(e) => {println!("{}", res[]); panic!(e)},
-    }
+    let url = format!("http://messi.hyyravintolat.fi/publicapi/restaurant/{}", id);
+    let res = api(url[]).read_to_string().unwrap();
+    let response: ApiResponse<Vec<Menu>> = json::decode(res[]).unwrap();
+    response.data
 }
 
 fn main() {
