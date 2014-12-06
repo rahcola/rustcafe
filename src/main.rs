@@ -118,14 +118,11 @@ fn restaurant_id(rs: &Vec<Restaurant>, name: &str) -> Option<u64> {
 }
 
 fn price_symbol(food: &Food) -> &'static str {
-    if food.price.name[] == "Bistro" {
-        "€€€€"
-    } else if food.price.name[] == "Maukkaasti" {
-        "€€€"
-    } else if food.price.name[] == "Edullisesti" {
-        "€€"
-    } else {
-        "€"
+    match food.price.name[] {
+        "Bistro" => "€€€€",
+        "Maukkaasti" => "€€€",
+        "Edullisesti" => "€€",
+        _ => "€",
     }
 }
 
