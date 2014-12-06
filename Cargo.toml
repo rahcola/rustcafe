@@ -1,13 +1,16 @@
 [package]
 name = "rustcafe"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Jani Rahkola <jani.rahkola@iki.fi>"]
 
 [[bin]]
 name = "rustcafe"
 
 [dependencies.hyper]
-git = "https://github.com/hyperium/hyper"
+git = "git://github.com/hyperium/hyper"
 
 [dependencies.docopt_macros]
 git = "git://github.com/docopt/docopt.rs"
+
+[dependencies.chrono]
+git = "git://github.com/lifthrasiir/rust-chrono.git"

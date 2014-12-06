@@ -1,9 +1,18 @@
 [root]
 name = "rustcafe"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
+ "chrono 0.1.3 (git+git://github.com/lifthrasiir/rust-chrono.git)",
  "docopt_macros 0.6.12 (git+git://github.com/docopt/docopt.rs)",
  "hyper 0.0.1 (git+https://github.com/hyperium/hyper)",
+]
+
+[[package]]
+name = "chrono"
+version = "0.1.3"
+source = "git+git://github.com/lifthrasiir/rust-chrono.git#342c23d40a1e84ca68b1c6e28ff0b07f970bc449"
+dependencies = [
+ "time 0.1.0 (git+https://github.com/rust-lang/time)",
 ]
 
 [[package]]
