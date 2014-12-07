@@ -72,37 +72,70 @@ impl<D: Decoder<E>, E> Decodable<D, E> for UnicafeDate {
     }
 }
 
-#[deriving(Show)]
-struct UnicafeError {
-    message: Option<String>,
+enum UnicafeError {
+    BadStatusCode(StatusCode),
+    DecoderError(json::DecoderError),
+    HttpError(hyper::HttpError),
+    IoError(io::IoError),
+    NoFoodToday,
+    NoSuchRestaurant(String),
+    ParseError(url::ParseError),
+}
+
+impl fmt::Show for UnicafeError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match self.detail() {
+            Some(msg) => write!(fmt, "{}: {}", self.description(), msg),
+            None => write!(fmt, "{}", self.description()),
+        }
+    }
 }
 
 impl Error for UnicafeError {
-    fn description(&self) -> &str { "Unicafe error" }
-    fn detail(&self) -> Option<String> { self.message.clone() }
+    fn description(&self) -> &str {
+        match *self {
+            UnicafeError::BadStatusCode(..) => "bad HTTP status code",
+            UnicafeError::DecoderError(ref e) => e.description().clone(),
+            UnicafeError::HttpError(ref e) => e.description().clone(),
+            UnicafeError::IoError(ref e) => e.description().clone(),
+            UnicafeError::NoFoodToday => "no food today",
+            UnicafeError::NoSuchRestaurant(..) => "no such restaurant",
+            UnicafeError::ParseError(ref e) => e.description().clone(),
+        }
+    }
+
+    fn detail(&self) -> Option<String> {
+        match *self {
+            UnicafeError::BadStatusCode(ref code)
+                => Some(format!("{}", code)),
+            UnicafeError::NoSuchRestaurant(ref restaurant)
+                => Some(restaurant.clone()),
+            _ => None,
+        }
+    }
+}
+
+impl FromError<hyper::HttpError> for UnicafeError {
+    fn from_error(err: hyper::HttpError) -> UnicafeError {
+        UnicafeError::HttpError(err)
+    }
 }
 
 impl FromError<io::IoError> for UnicafeError {
     fn from_error(err: io::IoError) -> UnicafeError {
-        UnicafeError {
-            message: err.detail(),
-        }
+        UnicafeError::IoError(err)
     }
 }
 
 impl FromError<serialize::json::DecoderError> for UnicafeError {
     fn from_error(err: serialize::json::DecoderError) -> UnicafeError {
-        UnicafeError {
-            message: err.detail(),
-        }
+        UnicafeError::DecoderError(err)
     }
 }
 
 impl FromError<url::ParseError> for UnicafeError {
     fn from_error(err: url::ParseError) -> UnicafeError {
-        UnicafeError {
-            message: err.detail(),
-        }
+        UnicafeError::ParseError(err)
     }
 }
 
@@ -122,21 +155,36 @@ fn finnish_weekday(w: Weekday) -> &'static str {
     }
 }
 
-fn api<T: serialize::Decodable<serialize::json::Decoder,
-                               serialize::json::DecoderError>>
-    (url_str: &str) -> Result<T, UnicafeError> {
+fn price_symbol(food: &Food) -> &'static str {
+    match food.price.name[] {
+        "Bistro" => "€€€€",
+        "Maukkaasti" => "€€€",
+        "Edullisesti" => "€€",
+        _ => "€",
+    }
+}
+
+fn restaurant_id(rs: &Vec<Restaurant>, name: &str) -> Option<u64> {
+    rs.iter().find(|r| r.name[] == name).map(|r| r.id)
+}
+
+fn todays_menu(menus: &Vec<Menu>) -> Option<&Menu> {
+    let today = UnicafeDate(unicafe_today());
+    menus.iter().find(|m| m.date == today && m.data.len() > 0)
+}
+
+fn api<T: Decodable<json::Decoder, json::DecoderError>>(url_str: &str) -> Result<T, UnicafeError> {
     let url = try!(Url::parse(url_str));
-    let res = match Request::get(url)
-        .and_then(|r| r.start())
-        .and_then(|r| r.send()) {
-            Ok(ref mut r @ Response {status: StatusCode::Ok, ..})
-                => try!(r.read_to_string()),
-            Ok(Response {status: x, ..})
-                => return Err(UnicafeError{ message: Some(format!("GET {} failed: {}", url_str, x)), }),
-            Err(e)
-                => return Err(UnicafeError{ message: Some(format!("GET {} failed: {}", url_str, e)), }),
-        };
-    Ok((try!(json::decode::<ApiResponse<T>>(res[]))).data)
+    let mut res = try!(Request::get(url)
+                       .and_then(|r| r.start())
+                       .and_then(|r| r.send()));
+    let json_str = match res {
+        Response {status: StatusCode::Ok, ..}
+          => try!(res.read_to_string()),
+        Response {status: x, ..}
+          => return Err(UnicafeError::BadStatusCode(x)),
+    };
+    Ok((try!(json::decode::<ApiResponse<T>>(json_str[]))).data)
 }
 
 fn restaurants() -> Result<Vec<Restaurant>, UnicafeError> {
@@ -145,19 +193,6 @@ fn restaurants() -> Result<Vec<Restaurant>, UnicafeError> {
 
 fn menus(id: u64) -> Result<Vec<Menu>, UnicafeError> {
     api(format!("http://messi.hyyravintolat.fi/publicapi/restaurant/{}", id)[])
-}
-
-fn restaurant_id(rs: &Vec<Restaurant>, name: &str) -> Option<u64> {
-    rs.iter().find(|r| r.name[] == name).map(|r| r.id)
-}
-
-fn price_symbol(food: &Food) -> &'static str {
-    match food.price.name[] {
-        "Bistro" => "€€€€",
-        "Maukkaasti" => "€€€",
-        "Edullisesti" => "€€",
-        _ => "€",
-    }
 }
 
 docopt!(Args deriving Show, "
@@ -169,32 +204,27 @@ Options:
 
 fn doit(args: Args) -> Result<(), UnicafeError> {
     let rs = try!(restaurants());
-    let r = args.arg_restaurant[];
-    match restaurant_id(&rs, r) {
-        Some(id) => {
-            let menus = try!(menus(id));
-            if args.flag_today {
-                let today = UnicafeDate(unicafe_today());
-                menus.iter().find(|m| m.date == today).map(|m| {
-                    for f in m.data.iter() {
-                        println!("{}\t{}", price_symbol(f), f.name);
-                    }
-                });
-            } else {
-                for m in menus.iter() {
-                    println!("{}", m.date);
-                    for f in m.data.iter() {
-                        println!("\t{}\t{}", price_symbol(f), f.name);
-                    }
-                }
-            };
-            Ok(())
-        },
-        None => Err(UnicafeError{ message: Some(format!("no restaurant {} exists", r)) }),
-    }
+    let r = args.arg_restaurant;
+    let id = try!(restaurant_id(&rs, r[])
+                  .ok_or(UnicafeError::NoSuchRestaurant(r)));
+    let menus = try!(menus(id));
+    if args.flag_today {
+        let menu = try!(todays_menu(&menus).ok_or(UnicafeError::NoFoodToday));
+        for f in menu.data.iter() {
+            println!("{}\t{}", price_symbol(f), f.name);
+        }
+    } else {
+        for m in menus.iter() {
+            println!("{}", m.date);
+            for f in m.data.iter() {
+                println!("\t{}\t{}", price_symbol(f), f.name);
+            }
+        }
+    };
+    Ok(())
 }
 
 fn main() {
     let args: Args = Args::docopt().decode().unwrap_or_else(|e| e.exit());
-    doit(args).unwrap_or_else(|e| println!("Runtime error: {}", e));
+    doit(args).unwrap_or_else(|e| println!("{}", e));
 }
