@@ -62,13 +62,16 @@ impl fmt::Show for UnicafeDate {
 
 impl<D: Decoder<E>, E> Decodable<D, E> for UnicafeDate {
     fn decode(d: &mut D) -> Result<UnicafeDate, E> {
-        let now = unicafe_today();
         let s = try!(d.read_str());
-        let cap = regex!(r"^[:alpha:]+ (\d{1,2})\.(\d{1,2})$")
-            .captures(s[]).unwrap();
-        let now = now.with_month(from_str(cap.at(2)).unwrap()).unwrap()
-            .with_day(from_str(cap.at(1)).unwrap()).unwrap();
-        Ok(UnicafeDate(now))
+        let cap = try!(regex!(r"^[:alpha:]+ (\d{1,2})\.(\d{1,2})$")
+                       .captures(s[]).ok_or(d.error("no date found")));
+        let day = try!(from_str(cap.at(1)).ok_or(d.error("no day given")));
+        let mon = try!(from_str(cap.at(2)).ok_or(d.error("no month given")));
+        Ok(UnicafeDate(try!(unicafe_today()
+                            .with_month(mon)
+                            .ok_or(d.error("invalid month"))
+                            .and_then(|now| now.with_day(day)
+                                      .ok_or(d.error("invalid day"))))))
     }
 }
 
