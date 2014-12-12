@@ -36,9 +36,18 @@ struct Restaurant {
 #[deriving(PartialEq, Eq)]
 struct UnicafeDate(Date<FixedOffset>);
 
+#[deriving(Show)]
+enum PriceClass {
+    Bistro,
+    Maukkaasti,
+    Edullisesti,
+    Keitto,
+    Makeasti,
+}
+
 #[deriving(Decodable, Show)]
 struct Price {
-    name: String,
+    name: PriceClass,
 }
 
 #[deriving(Decodable, Show)]
@@ -73,6 +82,19 @@ impl<D: Decoder<E>, E> Decodable<D, E> for UnicafeDate {
                             .ok_or(d.error("invalid month"))
                             .and_then(|now| now.with_day(day)
                                       .ok_or(d.error("invalid day"))))))
+    }
+}
+
+impl<D: Decoder<E>, E> Decodable<D, E> for PriceClass {
+    fn decode(d: &mut D) -> Result<PriceClass, E> {
+        match try!(d.read_str())[] {
+            "Bistro" => Ok(PriceClass::Bistro),
+            "Maukkaasti" => Ok(PriceClass::Maukkaasti),
+            "Edullisesti" => Ok(PriceClass::Edullisesti),
+            "Keitto" => Ok(PriceClass::Keitto),
+            "Makeasti" => Ok(PriceClass::Makeasti),
+            _ => Err(d.error("unknown price")),
+        }
     }
 }
 
@@ -160,15 +182,6 @@ fn finnish_weekday(w: Weekday) -> &'static str {
     }
 }
 
-fn price_symbol(food: &Food) -> &'static str {
-    match food.price.name[] {
-        "Bistro" => "€€€€",
-        "Maukkaasti" => "€€€",
-        "Edullisesti" => "€€",
-        _ => "€",
-    }
-}
-
 fn restaurant_id(rs: &Vec<Restaurant>, name: &str) -> Option<u64> {
     rs.iter().find(|r| r.name[] == name).map(|r| r.id)
 }
@@ -216,13 +229,13 @@ fn doit(args: Args) -> Result<(), UnicafeError> {
     if args.flag_today {
         let menu = try!(todays_menu(&menus).ok_or(UnicafeError::NoFoodToday));
         for f in menu.data.iter() {
-            println!("{}\t{}", price_symbol(f), f.name);
+            println!("{}\t{}", f.price.name, f.name);
         }
     } else {
         for m in menus.iter() {
             println!("{}", m.date);
             for f in m.data.iter() {
-                println!("\t{}\t{}", price_symbol(f), f.name);
+                println!("\t{}\t{}", f.price.name, f.name);
             }
         }
     };
