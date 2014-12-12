@@ -1,4 +1,4 @@
-#![feature(slicing_syntax, phase)]
+#![feature(slicing_syntax, phase, globs)]
 extern crate core;
 extern crate chrono;
 extern crate docopt;
@@ -56,7 +56,8 @@ struct Menu {
 impl fmt::Show for UnicafeDate {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let UnicafeDate(d) = *self;
-        write!(f, "{} {}.{}", finnish_weekday(d.weekday()), d.day(), d.month())
+        write!(f, "{} {}.{}",
+               finnish_weekday(d.weekday()), d.day(), d.month())
     }
 }
 
@@ -147,14 +148,15 @@ fn unicafe_today() -> Date<FixedOffset> {
 }
 
 fn finnish_weekday(w: Weekday) -> &'static str {
+    use chrono::Weekday::*;
     match w {
-        Weekday::Mon => "Ma",
-        Weekday::Tue => "Ti",
-        Weekday::Wed => "Ke",
-        Weekday::Thu => "To",
-        Weekday::Fri => "Pe",
-        Weekday::Sat => "La",
-        Weekday::Sun => "Su",
+        Mon => "Ma",
+        Tue => "Ti",
+        Wed => "Ke",
+        Thu => "To",
+        Fri => "Pe",
+        Sat => "La",
+        Sun => "Su",
     }
 }
 
