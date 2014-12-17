@@ -40,6 +40,7 @@ enum PriceClass {
     Maukkaasti,
     Edullisesti,
     Keitto,
+    Kevyesti,
     Makeasti,
 }
 
@@ -90,8 +91,9 @@ impl<D: Decoder<E>, E> Decodable<D, E> for PriceClass {
             "Maukkaasti" => Ok(PriceClass::Maukkaasti),
             "Edullisesti" => Ok(PriceClass::Edullisesti),
             "Keitto" => Ok(PriceClass::Keitto),
+            "Kevyesti" => Ok(PriceClass::Kevyesti),
             "Makeasti" => Ok(PriceClass::Makeasti),
-            _ => Err(d.error("unknown price")),
+            x => Err(d.error(format!("unknown price {}", x)[])),
         }
     }
 }
@@ -134,6 +136,8 @@ impl Error for UnicafeError {
                 => Some(format!("{}", code)),
             UnicafeError::NoSuchRestaurant(ref restaurant)
                 => Some(restaurant.clone()),
+            UnicafeError::DecoderError(ref e)
+                => e.detail(),
             _ => None,
         }
     }
@@ -240,5 +244,5 @@ fn doit(args: Args) -> Result<(), UnicafeError> {
 
 fn main() {
     let args: Args = Args::docopt().decode().unwrap_or_else(|e| e.exit());
-    doit(args).unwrap_or_else(|e| println!("{}", e));
+    doit(args).unwrap_or_else(|e| println!("{} {}", e, e.detail()));
 }
