@@ -12,10 +12,8 @@ extern crate url;
 use core::fmt;
 use chrono::{Date, UTC, FixedOffset, Datelike, Weekday};
 use docopt::Docopt;
-use hyper::client::Request;
-use hyper::client::Response;
+use hyper::Client;
 use hyper::status::StatusCode;
-use hyper::Url;
 use serialize::{json, Decoder, Decodable};
 use std::error::{FromError, Error};
 use std::io;
@@ -33,7 +31,7 @@ struct Restaurant {
     name: String,
 }
 
-#[deriving(PartialEq, Eq)]
+#[deriving(PartialEq)]
 struct UnicafeDate(Date<FixedOffset>);
 
 #[deriving(Show)]
@@ -64,7 +62,7 @@ struct Menu {
 
 impl fmt::Show for UnicafeDate {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let UnicafeDate(d) = *self;
+        let UnicafeDate(ref d) = *self;
         write!(f, "{} {}.{}",
                finnish_weekday(d.weekday()), d.day(), d.month())
     }
@@ -191,15 +189,13 @@ fn todays_menu(menus: &Vec<Menu>) -> Option<&Menu> {
     menus.iter().find(|m| m.date == today && m.data.len() > 0)
 }
 
-fn api<T: Decodable<json::Decoder, json::DecoderError>>(url_str: &str) -> Result<T, UnicafeError> {
-    let url = try!(Url::parse(url_str));
-    let mut res = try!(Request::get(url)
-                       .and_then(|r| r.start())
-                       .and_then(|r| r.send()));
+fn api<T: Decodable<json::Decoder, json::DecoderError>>(url: &str) -> Result<T, UnicafeError> {
+    let mut client = Client::new();
+    let mut res = try!(client.get(url).send());
     let json_str = match res {
-        Response {status: StatusCode::Ok, ..}
+        hyper::client::Response {status: StatusCode::Ok, ..}
           => try!(res.read_to_string()),
-        Response {status: x, ..}
+        hyper::client::Response {status: x, ..}
           => return Err(UnicafeError::BadStatusCode(x)),
     };
     Ok((try!(json::decode::<ApiResponse<T>>(json_str[]))).data)
