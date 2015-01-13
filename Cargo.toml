@@ -6,11 +6,10 @@ authors = ["Jani Rahkola <jani.rahkola@iki.fi>"]
 [[bin]]
 name = "rustcafe"
 
-[dependencies.hyper]
-git = "git://github.com/hyperium/hyper"
-
-[dependencies.docopt_macros]
-git = "git://github.com/docopt/docopt.rs"
-
-[dependencies.chrono]
-git = "git://github.com/lifthrasiir/rust-chrono.git"
+[dependencies]
+chrono = "*"
+docopt = "*"
+hyper = "*"
+regex = "*"
+regex_macros = "*"
+rustc-serialize = "0.2"
