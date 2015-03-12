@@ -14,9 +14,7 @@ use hyper::Client;
 use hyper::status::StatusCode;
 use rustc_serialize::{json, Decoder, Decodable};
 use std::error::{FromError, Error};
-use std::io::Read;
-use std::{io, old_io, fmt};
-use std::num::ParseIntError;
+use std::{io, fmt, num};
 use std::str::{FromStr};
 
 #[derive(RustcDecodable, Debug)]
@@ -76,10 +74,10 @@ impl Decodable for UnicafeDate {
                        .captures(&*s).ok_or(d.error("no date found")));
         let day_s = try!(cap.at(1).ok_or(d.error("no day given")));
         let day = try!(FromStr::from_str(day_s)
-                       .map_err(|e: ParseIntError| d.error(e.description())));
+                       .map_err(|e: num::ParseIntError| d.error(e.description())));
         let mon_s = try!(cap.at(2).ok_or(d.error("no month given")));
         let mon = try!(FromStr::from_str(mon_s)
-                       .map_err(|e: ParseIntError| d.error(e.description())));
+                       .map_err(|e: num::ParseIntError| d.error(e.description())));
         Ok(UnicafeDate(try!(unicafe_today()
                             .with_month(mon)
                             .ok_or(d.error("invalid month"))
@@ -114,7 +112,6 @@ enum UnicafeError {
     DecoderError(json::DecoderError),
     HttpError(hyper::HttpError),
     IoError(io::Error),
-    OldIoError(old_io::IoError),
     NoFoodToday,
     NoSuchRestaurant(String),
 }
@@ -126,7 +123,6 @@ impl Error for UnicafeError {
             UnicafeError::DecoderError(ref e) => e.description().clone(),
             UnicafeError::HttpError(ref e) => e.description().clone(),
             UnicafeError::IoError(ref e) => e.description().clone(),
-            UnicafeError::OldIoError(ref e) => e.description().clone(),
             UnicafeError::NoFoodToday => "no food today",
             UnicafeError::NoSuchRestaurant(..) => "no such restaurant",
         }
@@ -138,7 +134,6 @@ impl Error for UnicafeError {
             UnicafeError::DecoderError(ref e) => Some(e),
             UnicafeError::HttpError(ref e) => Some(e),
             UnicafeError::IoError(ref e) => Some(e),
-            UnicafeError::OldIoError(ref e) => Some(e),
             UnicafeError::NoFoodToday => None,
             UnicafeError::NoSuchRestaurant(_) => None,
         }
@@ -160,12 +155,6 @@ impl fmt::Display for UnicafeError {
 impl FromError<hyper::HttpError> for UnicafeError {
     fn from_error(err: hyper::HttpError) -> UnicafeError {
         UnicafeError::HttpError(err)
-    }
-}
-
-impl FromError<old_io::IoError> for UnicafeError {
-    fn from_error(err: old_io::IoError) -> UnicafeError {
-        UnicafeError::OldIoError(err)
     }
 }
 
@@ -213,7 +202,7 @@ fn api<T: Decodable>(url: &str) -> Result<T, UnicafeError> {
     let mut json_str = String::new();
     match res {
         hyper::client::Response {status: StatusCode::Ok, ..}
-          => try!(res.read_to_string(&mut json_str)),
+          => try!(io::Read::read_to_string(&mut res, &mut json_str)),
         hyper::client::Response {status: x, ..}
           => return Err(UnicafeError::BadStatusCode(x)),
     };
