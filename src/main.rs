@@ -1,40 +1,40 @@
 #![feature(plugin)]
+#![plugin(regex_macros)]
 extern crate core;
 extern crate chrono;
 extern crate hyper;
 extern crate regex;
-#[plugin] extern crate regex_macros;
+extern crate regex_macros;
 extern crate "rustc-serialize" as rustc_serialize;
 extern crate docopt;
-extern crate url;
 
-use core::fmt;
 use chrono::{Date, UTC, FixedOffset, Datelike, Weekday};
 use docopt::Docopt;
 use hyper::Client;
 use hyper::status::StatusCode;
 use rustc_serialize::{json, Decoder, Decodable};
 use std::error::{FromError, Error};
-use std::io;
+use std::io::Read;
+use std::{io, old_io, fmt};
+use std::num::ParseIntError;
 use std::str::{FromStr};
-use url::ParseError;
 
-#[derive(RustcDecodable, Show)]
+#[derive(RustcDecodable, Debug)]
 struct ApiResponse<T> {
     status: String,
     data: T,
 }
 
-#[derive(RustcDecodable, Show)]
+#[derive(RustcDecodable, Debug)]
 struct Restaurant {
     id: u64,
     name: String,
 }
 
-#[derive(PartialEq, Eq, Show)]
+#[derive(PartialEq, Eq, Debug)]
 struct UnicafeDate(Date<FixedOffset>);
 
-#[derive(Show)]
+#[derive(Debug)]
 enum PriceClass {
     Bistro,
     Maukkaasti,
@@ -44,25 +44,25 @@ enum PriceClass {
     Makeasti,
 }
 
-#[derive(RustcDecodable, Show)]
+#[derive(RustcDecodable, Debug)]
 struct Price {
     name: PriceClass,
 }
 
-#[derive(RustcDecodable, Show)]
+#[derive(RustcDecodable, Debug)]
 struct Food {
     name: String,
     price: Price,
 }
 
-#[derive(RustcDecodable, Show)]
+#[derive(RustcDecodable, Debug)]
 struct Menu {
     date: UnicafeDate,
     data: Vec<Food>,
 }
 
-impl fmt::String for UnicafeDate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+impl fmt::Display for UnicafeDate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let UnicafeDate(ref d) = *self;
         write!(f, "{} {}.{}",
                finnish_weekday(d.weekday()), d.day(), d.month())
@@ -74,10 +74,12 @@ impl Decodable for UnicafeDate {
         let s = try!(d.read_str());
         let cap = try!(regex!(r"^[:alpha:]+ (\d{1,2})\.(\d{1,2})$")
                        .captures(&*s).ok_or(d.error("no date found")));
-        let day = try!(cap.at(1).and_then(FromStr::from_str)
-                       .ok_or(d.error("no day given")));
-        let mon = try!(cap.at(2).and_then(FromStr::from_str)
-                       .ok_or(d.error("no month given")));
+        let day_s = try!(cap.at(1).ok_or(d.error("no day given")));
+        let day = try!(FromStr::from_str(day_s)
+                       .map_err(|e: ParseIntError| d.error(e.description())));
+        let mon_s = try!(cap.at(2).ok_or(d.error("no month given")));
+        let mon = try!(FromStr::from_str(mon_s)
+                       .map_err(|e: ParseIntError| d.error(e.description())));
         Ok(UnicafeDate(try!(unicafe_today()
                             .with_month(mon)
                             .ok_or(d.error("invalid month"))
@@ -86,8 +88,8 @@ impl Decodable for UnicafeDate {
     }
 }
 
-impl fmt::String for PriceClass {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+impl fmt::Display for PriceClass {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
@@ -106,15 +108,15 @@ impl Decodable for PriceClass {
     }
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 enum UnicafeError {
     BadStatusCode(StatusCode),
     DecoderError(json::DecoderError),
     HttpError(hyper::HttpError),
-    IoError(io::IoError),
+    IoError(io::Error),
+    OldIoError(old_io::IoError),
     NoFoodToday,
     NoSuchRestaurant(String),
-    ParseError(url::ParseError),
 }
 
 impl Error for UnicafeError {
@@ -124,21 +126,33 @@ impl Error for UnicafeError {
             UnicafeError::DecoderError(ref e) => e.description().clone(),
             UnicafeError::HttpError(ref e) => e.description().clone(),
             UnicafeError::IoError(ref e) => e.description().clone(),
+            UnicafeError::OldIoError(ref e) => e.description().clone(),
             UnicafeError::NoFoodToday => "no food today",
             UnicafeError::NoSuchRestaurant(..) => "no such restaurant",
-            UnicafeError::ParseError(ref e) => e.description().clone(),
         }
     }
 
-    fn detail(&self) -> Option<String> {
+    fn cause(&self) -> Option<&Error> {
+        match *self {
+            UnicafeError::BadStatusCode(_) => None,
+            UnicafeError::DecoderError(ref e) => Some(e),
+            UnicafeError::HttpError(ref e) => Some(e),
+            UnicafeError::IoError(ref e) => Some(e),
+            UnicafeError::OldIoError(ref e) => Some(e),
+            UnicafeError::NoFoodToday => None,
+            UnicafeError::NoSuchRestaurant(_) => None,
+        }
+    }
+}
+
+impl fmt::Display for UnicafeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             UnicafeError::BadStatusCode(ref code)
-                => Some(format!("{}", code)),
+                => write!(f, "bad status code: {}", code),
             UnicafeError::NoSuchRestaurant(ref restaurant)
-                => Some(restaurant.clone()),
-            UnicafeError::DecoderError(ref e)
-                => e.detail(),
-            _ => None,
+                => write!(f, "no restaurant {}", restaurant),
+            ref e => write!(f, "{:?}", e),
         }
     }
 }
@@ -149,8 +163,14 @@ impl FromError<hyper::HttpError> for UnicafeError {
     }
 }
 
-impl FromError<io::IoError> for UnicafeError {
-    fn from_error(err: io::IoError) -> UnicafeError {
+impl FromError<old_io::IoError> for UnicafeError {
+    fn from_error(err: old_io::IoError) -> UnicafeError {
+        UnicafeError::OldIoError(err)
+    }
+}
+
+impl FromError<io::Error> for UnicafeError {
+    fn from_error(err: io::Error) -> UnicafeError {
         UnicafeError::IoError(err)
     }
 }
@@ -161,14 +181,8 @@ impl FromError<rustc_serialize::json::DecoderError> for UnicafeError {
     }
 }
 
-impl FromError<url::ParseError> for UnicafeError {
-    fn from_error(err: url::ParseError) -> UnicafeError {
-        UnicafeError::ParseError(err)
-    }
-}
-
 fn unicafe_today() -> Date<FixedOffset> {
-    UTC::today().with_offset(FixedOffset::east(60*60*2))
+    UTC::today().with_timezone(&FixedOffset::east(60*60*2))
 }
 
 fn finnish_weekday(w: Weekday) -> &'static str {
@@ -196,9 +210,10 @@ fn todays_menu(menus: &Vec<Menu>) -> Option<&Menu> {
 fn api<T: Decodable>(url: &str) -> Result<T, UnicafeError> {
     let mut client = Client::new();
     let mut res = try!(client.get(url).send());
-    let json_str = match res {
+    let mut json_str = String::new();
+    match res {
         hyper::client::Response {status: StatusCode::Ok, ..}
-          => try!(res.read_to_string()),
+          => try!(res.read_to_string(&mut json_str)),
         hyper::client::Response {status: x, ..}
           => return Err(UnicafeError::BadStatusCode(x)),
     };
@@ -220,7 +235,7 @@ Options:
     --today  display only today's menu
 ";
 
-#[derive(RustcDecodable, Show)]
+#[derive(RustcDecodable, Debug)]
 struct Args {
     arg_restaurant: String,
     flag_today: bool,
@@ -249,6 +264,7 @@ fn doit(args: Args) -> Result<(), UnicafeError> {
 }
 
 fn main() {
-    let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap();
+    let args: Args = Docopt::new(USAGE).and_then(|d| d.decode())
+        .unwrap_or_else(|e| e.exit());
     doit(args).unwrap_or_else(|e| println!("{:?}", e));
 }
